@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import streamlit as st
 import math
 
-def schedule(predict_data,mechine_data):
-    #----準備排程資料----
-    num_machines = len(mechine_data)
+def schedule(predict_data,machine_data):
+    # Prepare scheduling information
+    num_machines = len(machine_data)
     order_number = predict_data["訂單編號"].tolist()
     duration = predict_data["織造時間(天)"].tolist()
     duration_hour = predict_data["織造時間(小時)"].tolist()
@@ -12,13 +12,15 @@ def schedule(predict_data,mechine_data):
     length = predict_data["織造數量(米)"].tolist()
     flaw = predict_data["瑕疵數"].tolist()
     orders = [{"order_number":a,"length":b,"duration":c,"duration_hour":d,"deadline":e,"flaw":f} for a,b,c,d,e,f in zip(order_number,length,duration,duration_hour,deadline,flaw)]
-    initial_waiting_time = mechine_data["幾日後可加入生產"].tolist()
-    #----排程----
+    initial_waiting_time = machine_data["幾日後可加入生產"].tolist()
+    
+    # Sort the orders by deadline and duration
     orders.sort(key=lambda x: (x['deadline'], x['duration']))
     machine_assignments = [[] for _ in range(num_machines)]
     machine_end_times = [0] * num_machines
     next_available_times = initial_waiting_time[:]
-    #----找出最早的可用機台----
+    
+    # Find the earliest available machine
     def find_earliest_machine():
         earliest_time = float('inf')
         earliest_machine = None
@@ -28,7 +30,8 @@ def schedule(predict_data,mechine_data):
                 earliest_time = available_time
                 earliest_machine = i
         return earliest_machine, earliest_time
-    #----找出已有訂單且最適合的機台----
+    
+    # Find out the most suitable machine that already has an order
     def find_best_fit_machine(order_duration, order_deadline):
         best_fit_machine = None
         best_fit_machine_time = float('inf')
@@ -49,13 +52,13 @@ def schedule(predict_data,mechine_data):
             if best_fit_machine is None:
                 earliest_machine, earliest_time = find_earliest_machine()
                 if earliest_time >= order['deadline']:
-                    # 最早可用的時間已超過截止日期，停止處理此訂單
+                    # The earliest available time has exceeded the deadline, stop processing this order
                     break
                 split_duration = min(remaining_duration, order['deadline'] - earliest_time)
                 best_fit_machine = earliest_machine
                 earliest_time = max(machine_end_times[best_fit_machine], next_available_times[best_fit_machine])
             else:
-                # 找到合適的機台，計算開始和結束時間
+                # Find the appropriate machine and calculate the start and end time
                 earliest_time = max(machine_end_times[best_fit_machine], next_available_times[best_fit_machine])
                 split_duration = min(remaining_duration, order['deadline'] - earliest_time)
 
@@ -82,9 +85,9 @@ def schedule(predict_data,mechine_data):
         st.markdown('<font color="blue" style="font-size: 24px;">**所有訂單均已安排完成**</font>', unsafe_allow_html=True)
     return machine_assignments
             
-#----繪製甘特圖----
+# Draw a Gantt chart
 def plot_gantt_chart(machine_assignments):
-    #設置40種顏色
+    # Set color
     colors = [
     '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f',
     '#bcbd22', '#17becf', '#1a9850', '#fdae61', '#6baed6', '#ff9e9e', '#ffdc9e', '#c7c7c7',
@@ -93,7 +96,7 @@ def plot_gantt_chart(machine_assignments):
     '#a3a3c2', '#b2df8a', '#ff8080', '#4682b4', '#9370db', '#ffc125', '#9f79ee', '#daa520'
 ]
     plt.figure(figsize=(12, 6))
-    # 哈希表用於記錄每個訂單的顏色
+    # Hash table is used to record the color of each order
     color_dict = {}
     for machine_index, assignments in enumerate(machine_assignments):
         for task in assignments:
@@ -101,13 +104,11 @@ def plot_gantt_chart(machine_assignments):
             start_time = task['start_time']
             end_time = task['end_time']
             duration = end_time - start_time
-             # 根據訂單號確定顏色
+            # Determine the color based on the order number
             color = color_dict.setdefault(order_number, colors[len(color_dict) % len(colors)])
             plt.barh(y=machine_index, width=duration, left=start_time, height=0.4, color=color, edgecolor='black')
-            # 繪製開始和結束時間的垂直虛線
-            # plt.axvline(x=start_time, color='gray', linestyle='--', linewidth=0.5)
-            # plt.axvline(x=end_time, color='gray', linestyle='--', linewidth=0.5)
 
+    # Set the legend
     patches = [plt.Rectangle((0,0),1,1, color=color_dict[order]) for order in color_dict]
     plt.legend(patches, color_dict.keys(), bbox_to_anchor=(1.05, 0.7), loc='upper left', borderaxespad=0.,fontsize="large")
     plt.yticks(range(len(machine_assignments)), [f'Machine {i+1}' for i in range(len(machine_assignments))])
